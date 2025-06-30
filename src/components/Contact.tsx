@@ -1,15 +1,36 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+
+interface FormData {
+  name: string;
+  phone: string;
+  email: string;
+  message: string;
+  preferredTime: string;
+  agreed: boolean;
+}
+
+interface FormErrors {
+  name?: string;
+  phone?: string;
+  email?: string;
+  message?: string;
+  preferredTime?: string;
+  agreed?: string;
+}
 
 const Contact = () => {
   const { toast } = useToast();
-  const [formData, setFormData] = useState({
+  
+  // Auto-save form data to localStorage
+  const [formData, setFormData] = useLocalStorage<FormData>('contact-form-draft', {
     name: "",
     phone: "",
     email: "",
@@ -17,10 +38,19 @@ const Contact = () => {
     preferredTime: "",
     agreed: false
   });
-  const [errors, setErrors] = useState({});
+  
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  // Auto-save indicator
+  useEffect(() => {
+    if (formData.name || formData.email || formData.message) {
+      setLastSaved(new Date());
+    }
+  }, [formData]);
 
   const validateForm = () => {
-    const newErrors = {};
+    const newErrors: FormErrors = {};
     
     if (!formData.name.trim()) newErrors.name = "Name is required";
     if (!formData.phone.trim()) newErrors.phone = "Phone is required";
@@ -34,30 +64,53 @@ const Contact = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (validateForm()) {
       toast({
         title: "Message sent successfully!",
         description: "Dr. Blake will get back to you within 24 hours.",
       });
-      setFormData({
+      
+      // Clear form and localStorage after successful submission
+      const clearedForm = {
         name: "",
         phone: "",
         email: "",
         message: "",
         preferredTime: "",
         agreed: false
-      });
+      };
+      setFormData(clearedForm);
+      setLastSaved(null);
     }
   };
 
-  const handleChange = (field, value) => {
+  const handleChange = (field: keyof FormData, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: "" }));
     }
   };
+
+  const clearDraft = () => {
+    const clearedForm = {
+      name: "",
+      phone: "",
+      email: "",
+      message: "",
+      preferredTime: "",
+      agreed: false
+    };
+    setFormData(clearedForm);
+    setLastSaved(null);
+    toast({
+      title: "Draft cleared",
+      description: "Form has been reset.",
+    });
+  };
+
+  const hasDraftData = formData.name || formData.email || formData.message || formData.phone || formData.preferredTime;
 
   return (
     <section id="contact" className="py-20 bg-gray-50">
@@ -71,7 +124,23 @@ const Contact = () => {
           </p>
         </div>
         
-        <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12">
+        <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12 relative">
+          {/* Auto-save indicator */}
+          {hasDraftData && lastSaved && (
+            <div className="absolute top-4 right-4 flex items-center space-x-2 text-sm text-gray-500">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span>Auto-saved {lastSaved.toLocaleTimeString()}</span>
+              <Button
+                onClick={clearDraft}
+                variant="ghost"
+                size="sm"
+                className="text-xs text-red-500 hover:text-red-700 p-1 h-auto"
+              >
+                Clear draft
+              </Button>
+            </div>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid md:grid-cols-2 gap-6">
               <div>
@@ -150,7 +219,7 @@ const Contact = () => {
               <Checkbox
                 id="agreed"
                 checked={formData.agreed}
-                onCheckedChange={(checked) => handleChange("agreed", checked)}
+                onCheckedChange={(checked) => handleChange("agreed", !!checked)}
                 className={errors.agreed ? "border-red-500" : ""}
               />
               <Label htmlFor="agreed" className="text-sm text-gray-600">
